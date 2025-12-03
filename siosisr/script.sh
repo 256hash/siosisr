@@ -1,20 +1,19 @@
 #!/bin/bash
 
-# Arrêter le script en cas d'erreur
+
 set -e
-# Mode debug (optionnel, utile pour voir ce qui se passe)
 set -x
 
-# Mise à jour des dépôts 
+
 update && apt upgrade -y
 
-# ca-certificates et gnupg sont cruciaux pour la gestion des clés sous Debian
 apt install -y ca-certificates curl gnupg
 
-# Création du dossier pour les clés si inexistant
 install -m 0755 -d /etc/apt/keyrings
+
 # Téléchargement de la clé et conversion en format compatible
 curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
 # Ajustement des droits sur la clé
 chmod a+r /etc/apt/keyrings/docker.gpg
 
@@ -25,7 +24,8 @@ echo \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 apt update
-# Installation du moteur, du CLI, de containerd et des plugins (Buildx et Compose)
+
+#ajout plugin et conteneur
 apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 systemctl start docker
