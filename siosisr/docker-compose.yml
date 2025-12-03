@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # 1. Base de données pour Wordpress
+  mariadb_wp:
+    image: mariadb:latest
+    container_name: mariadb_wp
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: monmotdepasse
+      MYSQL_DATABASE: wordpressdb
+      MYSQL_USER: wordpressuser
+      MYSQL_PASSWORD: monmotdepasse
+    # NOTE: Pour un usage pro, ajoutez un volume ici
+
+  # 2. Service Wordpress
+  wordpress_tp:
+    image: wordpress:latest
+    container_name: wordpress_tp
+    depends_on:
+      - mariadb_wp
+    ports:
+      - "8080:80"
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: mariadb_wp
+      WORDPRESS_DB_USER: wordpressuser
+      WORDPRESS_DB_PASSWORD: monmotdepasse
+      WORDPRESS_DB_NAME: wordpressdb
+    # NOTE: Pour un usage pro, ajoutez un volume ici
+
+  # ----------------------------------------
+  # --- Services ZABBIX (Corrections appliquées) ---
+  # ----------------------------------------
+
+  # 3. Base de données pour Zabbix
+  mariadb_zabbix:
+    image: mariadb:10.11
+    container_name: mariadb_zabbix
+    restart: always
+    environment:
+      MYSQL_DATABASE: zabbixdb
+      MYSQL_USER: zabbixuser
+      MYSQL_PASSWORD: zabbixpassword
+      MYSQL_ROOT_PASSWORD: rootpassword
+    # Ajoutez un healthcheck pour que Zabbix Server attende que la DB soit vraiment prête
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# 4. Serveur Zabbix (le moteur)
+  zabbix_server:
+    image: zabbix/zabbix-server-mysql:latest
+    container_name: zabbix_server
+    depends_on:
+      # Attendre que la DB soit "healthy" et non juste "started"
+      mariadb_zabbix:
+        condition: service_healthy
+    restart: always
+    environment:
+      DB_SERVER_HOST: mariadb_zabbix
+      MYSQL_USER: zabbixuser
+      MYSQL_PASSWORD: zabbixpassword
+      MYSQL_DATABASE: zabbixdb
+      # Variables pour Zabbix
+      ZBX_STARTPOLLERS: 10
+      ZBX_STARTTRAPPERS: 5
+
+  # 5. Interface Web Zabbix (votre service d'origine)
+  zabbix_web:
+    image: zabbix/zabbix-web-apache-mysql:latest
+    container_name: zabbix_server_web
+    depends_on:
+      # Doit attendre le Serveur Zabbix
+      zabbix_server:
+        condition: service_started
+      # Ajouté : Doit aussi connaître la DB et attendre qu'elle soit prête
+      mariadb_zabbix:
+        condition: service_healthy
+    ports:
+      - "8081:8080" # Votre mapping
+    restart: always
+    environment:
+      ZBX_SERVER_HOST: zabbix_server # OK
+      # AJOUT CRUCIAL : Variables de connexion à la DB pour l'interface Web
+      MYSQL_DATABASE: zabbixdb
+      MYSQL_USER: zabbixuser
+      MYSQL_PASSWORD: zabbixpassword
+      DB_SERVER_HOST: mariadb_zabbix # Ajouté, le nom du service DB
+

@@ -1,31 +1,40 @@
 #!/bin/bash
-HEAD
-# script.sh - exemple de script simple
 
-echo "Bonjour, ceci est un script bash bidon !"
+# Arrêter le script en cas d'erreur
+set -e
+# Mode debug (optionnel, utile pour voir ce qui se passe)
+set -x
 
-# Afficher la date et l'heure
-echo "Nous sommes le : $(date)"
+# Mise à jour des dépôts 
+update && apt upgrade -y
 
-# Afficher la liste des fichiers du répertoire courant
-echo "Voici les fichiers dans ce dossier :"
-ls -l
+# ca-certificates et gnupg sont cruciaux pour la gestion des clés sous Debian
+apt install -y ca-certificates curl gnupg
 
-# Script to add a user to Linux system
-if [ $(id -u) -eq 0 ]; then
-	read -p "Enter username : " username
-	read -s -p "Enter password : " password
-	egrep "^$username" /etc/passwd >/dev/null
-	if [ $? -eq 0 ]; then
-		echo "$username exists!"
-		exit 1
-	else
-		pass=$(perl -e 'print crypt($ARGV[0], "password")' $password)
-		useradd -m -p $pass $username
-		[ $? -eq 0 ] && echo "User has been added to system!" || echo "Failed to add a user!"
-	fi
-else
-	echo "Only root may add a user to the system"
-	exit 2
-fi
-fix5
+# Création du dossier pour les clés si inexistant
+install -m 0755 -d /etc/apt/keyrings
+# Téléchargement de la clé et conversion en format compatible
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# Ajustement des droits sur la clé
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Détection automatique de l'architecture et du nom de code (bookworm)
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+apt update
+# Installation du moteur, du CLI, de containerd et des plugins (Buildx et Compose)
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+systemctl start docker
+systemctl enable docker
+
+# Permet de lancer docker sans 'sudo'
+usermod -aG docker $USER
+
+docker --version
+docker compose version
+
+echo "--- Installation terminée ! ---"
